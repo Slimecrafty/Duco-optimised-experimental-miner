@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Duino-Coin Web Miner</title>
+    <meta name="description" content="Duino-Coin web miner — futuristic edition">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://bernii.github.io/gauge.js/dist/gauge.min.js"></script>
+    <style>
+        :root {
+            --bg:       #070b14;
+            --surface:  #0d1526;
+            --border:   #1a3a5c;
+            --cyan:     #00f5ff;
+            --cyan-dim: #006677;
+            --green:    #00ff88;
+            --green-dim:#005533;
+            --orange:   #ff9f1c;
+            --red:      #ff3c5f;
+            --text:     #c8e6f5;
+            --muted:    #4a7a9b;
+            --glow-c:   0 0 12px #00f5ff88, 0 0 28px #00f5ff33;
+            --glow-g:   0 0 12px #00ff8888, 0 0 28px #00ff8833;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Share Tech Mono', monospace;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0,245,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,245,255,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Scanline overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.08) 2px,
+                rgba(0,0,0,0.08) 4px
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .page-wrap {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* ── Header ── */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #0d1526ee, #0a1020ee);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--cyan), var(--green), transparent);
+        }
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .duco-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 2px solid var(--cyan);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: var(--cyan);
+            box-shadow: var(--glow-c);
+            animation: pulse-icon 3s ease-in-out infinite;
+        }
+        @keyframes pulse-icon {
+            0%,100% { box-shadow: var(--glow-c); }
+            50%      { box-shadow: none; }
+        }
+        .logo-text {
+            font-family: 'Orbitron', sans-serif;
+        }
+        .logo-text .title {
+            font-size: 1.3rem;
+            font-weight: 900;
+            color: var(--cyan);
+            letter-spacing: 2px;
+            text-shadow: var(--glow-c);
+        }
+        .logo-text .sub {
+            font-size: 0.7rem;
+            color: var(--muted);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-size: 0.78rem;
+            color: var(--muted);
+        }
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--red);
+            margin-right: 6px;
+            transition: background 0.4s;
+        }
+        .status-dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green); }
+        #elapsed-display {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.8rem;
+            color: var(--cyan);
+        }
+
+        /* ── Panel card ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: rgba(0,245,255,0.04);
+            border-bottom: 1px solid var(--border);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--cyan);
+        }
+        .card-header i { font-size: 0.75rem; }
+        .card-body { padding: 16px; }
+
+        /* ── Mining form ── */
+        .form-card { margin-bottom: 20px; }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr auto;
+            gap: 12px;
+            align-items: end;
+        }
+        @media (max-width: 900px) {
+            .form-grid { grid-template-columns: 1fr 1fr; }
+        }
+        .field-wrap label {
+            display: block;
+            font-size: 0.65rem;
+            letter-spacing: 2px;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .field-wrap .input-inner {
+            position: relative;
+        }
+        .field-wrap .input-inner i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--cyan-dim);
+            font-size: 0.8rem;
+        }
+        .field-wrap input {
+            width: 100%;
+            background: rgba(0,245,255,0.04);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            color: var(--text);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            padding: 10px 12px 10px 34px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field-wrap input:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 2px rgba(0,245,255,0.1);
+        }
+        .field-wrap input::placeholder { color: var(--muted); opacity: 0.6; }
+
+        #mine-btn {
+            padding: 10px 28px;
+            background: transparent;
+            border: 2px solid var(--cyan);
+            border-radius: 3px;
+            color: var(--cyan);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            position: relative;
+            overflow: hidden;
+        }
+        #mine-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--cyan);
+            transform: translateX(-100%);
+            transition: transform 0.25s;
+            z-index: -1;
+        }
+        #mine-btn:hover::before { transform: translateX(0); }
+        #mine-btn:hover { color: var(--bg); }
+        #mine-btn:disabled {
+            border-color: var(--green);
+            color: var(--green);
+            cursor: default;
+            box-shadow: var(--glow-g);
+        }
+        #mine-btn:disabled::before { display: none; }
+
+        /* ── Alert tip ── */
+        .tip-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            background: rgba(0,245,255,0.05);
+            border: 1px solid rgba(0,245,255,0.2);
+            border-radius: 3px;
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-bottom: 20px;
+        }
+        .tip-bar i { color: var(--cyan); }
+        .tip-close {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+        }
+
+        /* ── Main grid ── */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 320px 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 1100px) {
+            .main-grid { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 700px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ── Hashrate gauge ── */
+        .gauge-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 0;
+        }
+        #gauge { width: 200px; height: 120px; }
+        .hashrate-big {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2rem;
+            font-weight: 900;
+            color: var(--cyan);
+            text-shadow: var(--glow-c);
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+        .hashrate-unit {
+            font-size: 0.7rem;
+            color: var(--muted);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        /* ── Stats ── */
+        .stat-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(26,58,92,0.5);
+            font-size: 0.8rem;
+        }
+        .stat-item:last-child { border-bottom: none; }
+        .stat-label { color: var(--muted); letter-spacing: 1px; }
+        .stat-value { color: var(--text); font-family: 'Orbitron', sans-serif; font-size: 0.72rem; }
+        .stat-value.good { color: var(--green); text-shadow: var(--glow-g); }
+        .stat-value.warn { color: var(--orange); }
+        .stat-value.bad  { color: var(--red); }
+
+        /* ── Log ── */
+        #log-box {
+            height: 180px;
+            overflow-y: auto;
+            font-size: 0.72rem;
+            line-height: 1.7;
+            color: var(--muted);
+            padding: 4px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+        #log-box span { color: var(--green); }
+        .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(26,58,92,0.3); }
+
+        /* ── Mempool section ── */
+        .mempool-section { margin-bottom: 20px; }
+        .mempool-area {
+            position: relative;
+            height: 220px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding: 0 12px;
+        }
+
+        /* Flow lanes */
+        .mempool-lane {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        .lane-label {
+            font-size: 0.6rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        /* Pending pool */
+        #pending-pool {
+            width: 220px;
+            min-width: 220px;
+            height: 180px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Mining engine */
+        .mining-engine {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            gap: 6px;
+        }
+        .engine-core {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .engine-ring {
+            position: absolute;
+            inset: -8px;
+            border-radius: 50%;
+            border: 2px solid var(--cyan-dim);
+            border-top-color: var(--cyan);
+            animation: spin 1.5s linear infinite;
+        }
+        .engine-ring.r2 {
+            inset: -16px;
+            border-color: var(--green-dim);
+            border-top-color: var(--green);
+            animation-duration: 2.5s;
+            animation-direction: reverse;
+        }
+        .engine-ring.r3 {
+            inset: -24px;
+            border-color: rgba(255,159,28,0.15);
+            border-top-color: var(--orange);
+            animation-duration: 3.5s;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .engine-icon {
+            font-size: 2rem;
+            color: var(--cyan);
+            text-shadow: var(--glow-c);
+            z-index: 1;
+        }
+        .engine-idle .engine-ring { border-top-color: var(--border); animation-play-state: paused; }
+        .engine-idle .engine-ring.r2 { border-top-color: var(--border); }
+        .engine-idle .engine-ring.r3 { border-top-color: var(--border); }
+        .engine-idle .engine-icon { color: var(--muted); text-shadow: none; }
+
+        .engine-hashes {
+            font-size: 0.7rem;
+            color: var(--muted);
+            letter-spacing: 1px;
+            text-align: center;
+        }
+
+        /* Arrow connectors */
+        .flow-arrow {
+            font-size: 1.2rem;
+            color: var(--cyan-dim);
+            padding: 0 8px;
+            flex-shrink: 0;
+        }
+
+        /* Confirmed chain */
+        #confirmed-chain {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 0;
+            overflow: hidden;
+            height: 180px;
+        }
+
+        /* Block cards */
+        .block-card {
+            min-width: 120px;
+            width: 120px;
+            height: 100px;
+            background: rgba(0,13,26,0.8);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 8px;
+            font-size: 0.62rem;
+            line-height: 1.5;
+            color: var(--muted);
+            position: relative;
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+        .block-card.pending {
+            border-color: rgba(0,245,255,0.3);
+            animation: float-pending 3s ease-in-out infinite;
+        }
+        .block-card.confirmed {
+            border-color: var(--green);
+            box-shadow: 0 0 10px rgba(0,255,136,0.3);
+        }
+        .block-card.new-confirm {
+            animation: pop-in 0.5s ease-out;
+        }
+        @keyframes float-pending {
+            0%,100% { transform: translateY(0); }
+            50%      { transform: translateY(-4px); }
+        }
+        @keyframes pop-in {
+            0%   { transform: scale(0.6); opacity: 0; border-color: var(--cyan); box-shadow: 0 0 30px var(--cyan); }
+            60%  { transform: scale(1.08); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .block-num {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.68rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .pending .block-num { color: var(--cyan); }
+        .confirmed .block-num { color: var(--green); }
+        .block-hash { color: var(--orange); font-size: 0.6rem; }
+        .block-meta { color: var(--muted); font-size: 0.58rem; }
+
+        .chain-link {
+            width: 20px;
+            height: 2px;
+            background: linear-gradient(90deg, var(--green-dim), var(--green));
+            flex-shrink: 0;
+            position: relative;
+        }
+        .chain-link::before, .chain-link::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 4px;
+            height: 4px;
+            background: var(--green);
+            border-radius: 50%;
+            transform: translateY(-50%);
+        }
+        .chain-link::before { left: 0; }
+        .chain-link::after  { right: 0; }
+
+        /* Pending pool layout */
+        .pending-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            height: 100%;
+            align-content: flex-start;
+            overflow: hidden;
+        }
+        .pending-mini {
+            width: 90px;
+            height: 70px;
+            background: rgba(0,13,26,0.9);
+            border: 1px solid rgba(0,245,255,0.25);
+            border-radius: 2px;
+            padding: 6px;
+            font-size: 0.58rem;
+            color: var(--muted);
+            animation: float-pending 2s ease-in-out infinite;
+        }
+        .pending-mini:nth-child(2) { animation-delay: 0.4s; }
+        .pending-mini:nth-child(3) { animation-delay: 0.8s; }
+        .pending-mini:nth-child(4) { animation-delay: 1.2s; }
+        .pending-mini:nth-child(5) { animation-delay: 1.6s; }
+        .pending-mini:nth-child(6) { animation-delay: 2.0s; }
+
+        /* ── Thread cards ── */
+        .threads-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .thread-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 12px 16px;
+            min-width: 160px;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .thread-gauge-wrap { position: relative; }
+        .thread-gauge-wrap canvas { display: block; }
+        .thread-info {}
+        .thread-label {
+            font-size: 0.65rem;
+            color: var(--muted);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .thread-rate {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            color: var(--green);
+            text-shadow: var(--glow-g);
+        }
+        .threads-placeholder {
+            color: var(--muted);
+            font-size: 0.8rem;
+            text-align: center;
+            width: 100%;
+            padding: 24px;
+            border: 1px dashed var(--border);
+            border-radius: 3px;
+        }
+
+        /* ── Bottom bar ── */
+        .bottom-bar {
+            display: flex;
+            gap: 16px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+        .bottom-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.75rem;
+            transition: all 0.2s;
+        }
+        .bottom-link:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        /* Particle canvas */
+        #particle-canvas {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.4;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="particle-canvas"></canvas>
+
+<div class="page-wrap">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="logo-area">
+            <div class="duco-icon"><i class="fa fa-coins"></i></div>
+            <div class="logo-text">
+                <div class="title">DUINO-COIN</div>
+                <div class="sub">Web Miner &nbsp;·&nbsp; v3.1</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div>
+                <span class="status-dot" id="status-dot"></span>
+                <span id="node-status">OFFLINE</span>
+            </div>
+            <div>
+                LATENCY: <span id="ping-display" style="color:var(--cyan)">—</span>
+            </div>
+            <div id="elapsed-display">00:00:00</div>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="card form-card">
+        <div class="card-header">
+            <i class="fa fa-terminal"></i> Mining Configuration
+        </div>
+        <div class="card-body">
+            <form id="mining-form">
+                <div class="form-grid">
+                    <div class="field-wrap">
+                        <label>Username</label>
+                        <div class="input-inner">
+                            <i class="fa fa-user"></i>
+                            <input type="text" id="usernameinput" placeholder="Duino-Coin username" name="username" autocomplete="username">
+                        </div>
+                    </div>
+                    <div class="field-wrap">
+                        <label>Threads <span style="color:var(--cyan-dim)">(optional)</span></label>
+                        <div class="input-inner">
+                            <i class="fa fa-hashtag"></i>
+                            <input type="text" id="threadsinput" placeholder="Auto-detect" name="threads">
+                        </div>
+                    </div>
+                    <div class="field-wrap">
+                        <label>Rig Name <span style="color:var(--cyan-dim)">(optional)</span></label>
+                        <div class="input-inner">
+                            <i class="fa fa-microchip"></i>
+                            <input type="text" id="riginput" placeholder="None" name="rigid">
+                        </div>
+                    </div>
+                    <div class="field-wrap">
+                        <label>Mining Key <span style="color:var(--cyan-dim)">(if set)</span></label>
+                        <div class="input-inner">
+                            <i class="fa fa-key"></i>
+                            <input type="password" id="keyinput" placeholder="Optional" name="keyinput">
+                        </div>
+                    </div>
+                    <div>
+                        <button type="submit" id="mine-btn">
+                            <i class="fa fa-bolt"></i>&nbsp; START MINING
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tip -->
+    <div class="tip-bar" id="tip-bar">
+        <i class="fa fa-circle-info"></i>
+        <span><b style="color:var(--cyan)">TIP:</b> Keep this tab active — browsers throttle JavaScript in background tabs, reducing hashrate.</span>
+        <button class="tip-close" onclick="document.getElementById('tip-bar').style.display='none'">×</button>
+    </div>
+
+    <!-- Main stats grid -->
+    <div class="main-grid">
+
+        <!-- Hashrate -->
+        <div class="card">
+            <div class="card-header"><i class="fa fa-bolt"></i> Total Hashrate</div>
+            <div class="card-body">
+                <div class="gauge-wrap">
+                    <canvas id="gauge"></canvas>
+                    <div class="hashrate-big" id="hashrate">0</div>
+                    <div class="hashrate-unit">Hashes / Second</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="card">
+            <div class="card-header"><i class="fa fa-chart-bar"></i> Statistics</div>
+            <div class="card-body">
+                <div class="stat-row">
+                    <div class="stat-item">
+                        <span class="stat-label">Accepted</span>
+                        <span class="stat-value good" id="shares-accepted">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Rejected</span>
+                        <span class="stat-value bad" id="shares-rejected">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Shares</span>
+                        <span class="stat-value" id="shares-total">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Efficiency</span>
+                        <span class="stat-value good" id="sharesperc">—</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Node</span>
+                        <span class="stat-value bad" id="node">DISCONNECTED</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Difficulty</span>
+                        <span class="stat-value warn" id="difficulty">—</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div class="card">
+            <div class="card-header"><i class="fa fa-list"></i> Miner Log</div>
+            <div class="card-body" style="padding:8px">
+                <div id="log-box">
+                    <div class="log-entry" style="color:var(--muted)">// Awaiting configuration...</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Mempool / Block Visualizer -->
+    <div class="card mempool-section">
+        <div class="card-header"><i class="fa fa-cubes"></i> Live Block Visualizer — Mining Flow</div>
+        <div class="mempool-area">
+
+            <!-- Pending pool -->
+            <div style="display:flex;flex-direction:column;align-items:center;">
+                <div class="lane-label">MEMPOOL</div>
+                <div id="pending-pool">
+                    <div class="pending-grid" id="pending-grid"></div>
+                </div>
+            </div>
+
+            <div class="flow-arrow"><i class="fa fa-chevron-right"></i></div>
+
+            <!-- Mining engine -->
+            <div class="mining-engine">
+                <div class="lane-label">MINING ENGINE</div>
+                <div class="engine-core engine-idle" id="engine-core">
+                    <div class="engine-ring"></div>
+                    <div class="engine-ring r2"></div>
+                    <div class="engine-ring r3"></div>
+                    <i class="fa fa-gear engine-icon"></i>
+                </div>
+                <div class="engine-hashes" id="engine-status">IDLE</div>
+            </div>
+
+            <div class="flow-arrow"><i class="fa fa-chevron-right"></i></div>
+
+            <!-- Confirmed chain -->
+            <div style="display:flex;flex-direction:column;align-items:flex-start;flex:1;overflow:hidden;">
+                <div class="lane-label">CONFIRMED CHAIN</div>
+                <div id="confirmed-chain">
+                    <div style="color:var(--muted);font-size:0.72rem;padding:8px;white-space:nowrap" id="chain-placeholder">Start mining to see confirmed blocks...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Thread performance -->
+    <div class="card">
+        <div class="card-header"><i class="fa fa-microchip"></i> Thread Performance</div>
+        <div class="card-body">
+            <div class="threads-grid" id="stats-per-cpu">
+                <div class="threads-placeholder">Start mining to see per-thread hashrates</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="bottom-bar">
+        <a href="https://wallet.duinocoin.com" class="bottom-link" target="_blank">
+            <i class="fa fa-wallet"></i> Web Wallet
+        </a>
+        <a href="https://github.com/revoxhere/duco-webservices" class="bottom-link" target="_blank">
+            <i class="fab fa-github"></i> GitHub
+        </a>
+        <a href="https://duinocoin.com" class="bottom-link" target="_blank">
+            <i class="fa fa-globe"></i> duinocoin.com
+        </a>
+    </div>
+
+</div>
+
+<script>
+/* ── Particle background ── */
+(function() {
+    const canvas = document.getElementById('particle-canvas');
+    const ctx = canvas.getContext('2d');
+    let W, H, particles = [];
+
+    function resize() {
+        W = canvas.width  = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    for (let i = 0; i < 60; i++) {
+        particles.push({
+            x: Math.random() * 1920,
+            y: Math.random() * 1080,
+            vx: (Math.random() - 0.5) * 0.3,
+            vy: (Math.random() - 0.5) * 0.3,
+            r: Math.random() * 1.5 + 0.5,
+            a: Math.random()
+        });
+    }
+
+    function drawParticles() {
+        ctx.clearRect(0, 0, W, H);
+        for (let p of particles) {
+            p.x += p.vx; p.y += p.vy;
+            if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+            if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(0,245,255,${p.a * 0.5})`;
+            ctx.fill();
+        }
+        requestAnimationFrame(drawParticles);
+    }
+    drawParticles();
+})();
+
+
+/* ── Gauge setup ── */
+const gaugeEl = document.getElementById('gauge');
+const mainGaugeOpts = {
+    angle: 0,
+    lineWidth: 0.1,
+    radiusScale: 1,
+    pointer: { length: 0.6, strokeWidth: 0.05, color: '#00f5ff' },
+    limitMax: false, limitMin: false,
+    colorStart: '#00f5ff',
+    strokeColor: '#1a3a5c',
+    highDpiSupport: true,
+    staticZones: [
+        { strokeStyle: '#006677', min: 0,       max: 0.33 },
+        { strokeStyle: '#ff9f1c', min: 0.33,    max: 0.66 },
+        { strokeStyle: '#00ff88', min: 0.66,    max: 1.0  }
+    ]
+};
+const mainGauge = new Gauge(gaugeEl).setOptions(mainGaugeOpts);
+mainGauge.setMinValue(0);
+mainGauge.animationSpeed = 40;
+mainGauge.set(0);
+
+const miniGaugeOpts = {
+    angle: -0.5, lineWidth: 0.12, radiusScale: 1,
+    pointer: { length: 0, strokeWidth: 0, color: '#57606f' },
+    limitMax: false, limitMin: false,
+    colorStart: '#00ff88',
+    strokeColor: '#1a3a5c',
+    highDpiSupport: false,
+};
+
+const gauges = [];
+
+
+/* ── URL params ── */
+const urlParams = new URLSearchParams(window.location.search);
+let username = urlParams.get('username') || '';
+let rigid    = urlParams.get('rigid')    || '';
+let miner_key = urlParams.get('keyinput') || '';
+let threads  = urlParams.get('threads')  || '';
+
+if (username) document.getElementById('usernameinput').value = username;
+if (rigid)    document.getElementById('riginput').value = rigid;
+if (miner_key) document.getElementById('keyinput').value = miner_key;
+if (threads)  document.getElementById('threadsinput').value = threads;
+
+
+/* ── State ── */
+let hashrates       = [];
+let sharesCorrect   = 0;
+let sharesRejected  = 0;
+let totalShares     = 0;
+let blockCount      = 0;
+let confirmedBlocks = 0;
+let timerInterval   = null;
+let hashUpdateTimer = null;
+let pendingHashes   = [];
+let isMining        = false;
+
+const hashrate_text = document.getElementById('hashrate');
+
+
+/* ── Helpers ── */
+function getTime() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function formatHashrate(h) {
+    h = parseFloat(h);
+    if (h >= 1e6)  return (h / 1e6).toFixed(2) + ' MH/s';
+    if (h >= 1000) return (h / 1000).toFixed(2) + ' kH/s';
+    return h.toFixed(2) + ' H/s';
+}
+
+function randomHex(len) {
+    let s = '';
+    const chars = '0123456789abcdef';
+    for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * 16)];
+    return s;
+}
+
+function minerlog(message) {
+    const box  = document.getElementById('log-box');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = message;
+    box.appendChild(entry);
+    if (box.children.length > 200) box.removeChild(box.firstChild);
+    box.scrollTop = box.scrollHeight;
+}
+
+
+/* ── Pending mempool blocks (cosmetic) ── */
+function buildPendingPool() {
+    const grid = document.getElementById('pending-grid');
+    grid.innerHTML = '';
+    const count = 6;
+    for (let i = 0; i < count; i++) {
+        const el = document.createElement('div');
+        el.className = 'pending-mini';
+        el.style.animationDelay = (i * 0.35) + 's';
+        el.innerHTML =
+            `<div style="color:#00ccdd;font-size:0.62rem;font-weight:bold;margin-bottom:3px">BLK #${1000 + Math.floor(Math.random()*8999)}</div>` +
+            `<div style="color:#ff9f1c;font-size:0.58rem">${randomHex(8)}</div>` +
+            `<div style="color:#4a7a9b;font-size:0.56rem;margin-top:2px">diff: ${Math.floor(Math.random()*8+1)}</div>`;
+        grid.appendChild(el);
+    }
+    // Refresh periodically to look live
+    if (isMining) {
+        clearTimeout(pendingRefreshTimer);
+        pendingRefreshTimer = setTimeout(buildPendingPool, 4000 + Math.random()*3000);
+    }
+}
+let pendingRefreshTimer = null;
+
+/* ── Confirmed block chain ── */
+function addConfirmedBlock(nonce, hashrate) {
+    const chain    = document.getElementById('confirmed-chain');
+    const placeholder = document.getElementById('chain-placeholder');
+    if (placeholder) placeholder.remove();
+
+    confirmedBlocks++;
+    const blockNum = confirmedBlocks;
+    const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Chain link between blocks
+    if (blockNum > 1) {
+        const link = document.createElement('div');
+        link.className = 'chain-link';
+        chain.appendChild(link);
+    }
+
+    const card = document.createElement('div');
+    card.className = 'block-card confirmed new-confirm';
+    card.innerHTML =
+        `<div class="block-num">#${String(blockNum).padStart(4,'0')}</div>` +
+        `<div class="block-hash">${randomHex(8)}…</div>` +
+        `<div class="block-meta">nonce: ${nonce || '?'}</div>` +
+        `<div class="block-meta">${formatHashrate(hashrate)}</div>` +
+        `<div class="block-meta">${ts}</div>`;
+    chain.appendChild(card);
+
+    // Scroll to newest
+    chain.scrollLeft = chain.scrollWidth;
+
+    // Keep chain from growing too large
+    const cards = chain.querySelectorAll('.block-card');
+    if (cards.length > 8) {
+        const links = chain.querySelectorAll('.chain-link');
+        if (links[0]) links[0].remove();
+        cards[0].remove();
+    }
+}
+
+
+/* ── Start mining ── */
+document.getElementById('mining-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    if (isMining) return;
+
+    username  = document.getElementById('usernameinput').value.trim();
+    rigid     = document.getElementById('riginput').value.trim() || 'None';
+    miner_key = document.getElementById('keyinput').value.trim();
+    threads   = parseInt(document.getElementById('threadsinput').value) || navigator.hardwareConcurrency || 1;
+
+    if (!username) {
+        document.getElementById('usernameinput').style.borderColor = 'var(--red)';
+        return;
+    }
+    document.getElementById('usernameinput').style.borderColor = '';
+
+    threads = Math.max(1, Math.min(8, threads));
+    if (threads > navigator.hardwareConcurrency) {
+        minerlog(`${getTime()} | Capped threads to ${navigator.hardwareConcurrency} (your CPU count)`);
+        threads = navigator.hardwareConcurrency;
+    }
+
+    isMining = true;
+
+    const btn = document.getElementById('mine-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-gear fa-spin"></i>&nbsp; MINING...';
+
+    // Start engine animation
+    const engine = document.getElementById('engine-core');
+    engine.classList.remove('engine-idle');
+    document.getElementById('engine-status').textContent = 'HASHING...';
+
+    // Start mempool animation
+    buildPendingPool();
+    pendingRefreshTimer = setTimeout(buildPendingPool, 4000);
+
+    mainGauge.maxValue = threads * 150000;
+
+    // Elapsed timer
+    let secs = 0;
+    timerInterval = setInterval(function() {
+        secs++;
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        document.getElementById('elapsed-display').textContent =
+            String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    }, 1000);
+
+    // Init hashrates array
+    hashrates = new Array(threads).fill(0);
+
+    // Build thread cards
+    document.getElementById('stats-per-cpu').innerHTML = '';
+    for (let i = 0; i < threads; i++) {
+        const card = document.createElement('div');
+        card.className = 'thread-card';
+        card.innerHTML =
+            `<div class="thread-gauge-wrap">
+                <canvas id="CPU${i}-gauge" width="42" height="50"></canvas>
+            </div>
+            <div class="thread-info">
+                <div class="thread-rate" id="CPU${i}-hashrate">0 H/s</div>
+                <div class="thread-label">Thread ${i + 1}</div>
+            </div>`;
+        document.getElementById('stats-per-cpu').appendChild(card);
+
+        gauges[i] = new Gauge(document.getElementById(`CPU${i}-gauge`)).setOptions(miniGaugeOpts);
+        gauges[i].maxValue = 150000;
+        gauges[i].setMinValue(0);
+        gauges[i].animationSpeed = 40;
+        gauges[i].set(0);
+    }
+
+    const wallet_id = Math.floor(Math.random() * 2811);
+
+    // Spawn workers
+    for (let w = 0; w < threads; w++) {
+        const workerVer = w;
+        const socketWorker = new Worker('js/webminer/worker.js');
+        socketWorker.postMessage(`Start,${username},${rigid},${workerVer},${wallet_id},${miner_key}`);
+
+        socketWorker.onmessage = function(event) {
+            const parts = event.data.split(',');
+            const type  = parts[0];
+
+            if (type === 'UpdateLog') {
+                minerlog(`<span>${parts[1]}</span>`);
+
+                // Ping calculation from log timestamps
+                const t1 = parseInt(parts[2]);
+                const t2 = parseInt(parts[3]);
+                if (!isNaN(t1) && !isNaN(t2)) {
+                    document.getElementById('ping-display').textContent = Math.abs(Math.round((t1 - t2) / 10)) + 'ms';
+                }
+
+            } else if (type === 'UpdateHashrate') {
+                const hr  = parseFloat(parts[2]);
+                const idx = parseInt(parts[3]);
+                hashrates[idx] = hr;
+
+                // Sum with parseFloat (NOT eval)
+                let total = 0;
+                for (let i = 0; i < hashrates.length; i++) total += parseFloat(hashrates[i]);
+
+                mainGauge.set(total);
+
+                // Display total
+                if (total >= 1e6)  hashrate_text.textContent = (total / 1e6).toFixed(2) + ' M';
+                else if (total >= 1000) hashrate_text.textContent = (total / 1000).toFixed(2) + ' k';
+                else hashrate_text.textContent = total.toFixed(2);
+
+                // Per-thread display
+                document.getElementById(`CPU${idx}-hashrate`).textContent = formatHashrate(hr);
+                if (gauges[idx]) gauges[idx].set(hr);
+
+                // Update engine status
+                document.getElementById('engine-status').textContent = formatHashrate(total).toUpperCase();
+
+            } else if (type === 'UpdateDiff') {
+                const diff = parseInt(parts[1]);
+                document.getElementById('difficulty').textContent = diff;
+
+            } else if (type === 'GoodShare') {
+                totalShares++;
+                sharesCorrect++;
+                updateShareDisplay();
+
+                // Node display
+                document.getElementById('node').textContent = 'MAGI-NODE';
+                document.getElementById('node').className = 'stat-value good';
+                document.getElementById('status-dot').classList.add('connected');
+                document.getElementById('node-status').textContent = 'CONNECTED';
+
+                // Add block to chain
+                const lastLog = document.getElementById('log-box').lastElementChild;
+                let nonce = null;
+                if (lastLog) {
+                    const m = lastLog.textContent.match(/Nonce[:\s]+(\d+)/i);
+                    if (m) nonce = m[1];
+                }
+                const lastHr = hashrates.reduce((a, b) => a + parseFloat(b), 0);
+                addConfirmedBlock(nonce, lastHr);
+
+            } else if (type === 'BadShare') {
+                totalShares++;
+                sharesRejected++;
+                updateShareDisplay();
+
+            } else if (type === 'Error') {
+                const btn = document.getElementById('mine-btn');
+                btn.style.borderColor = 'var(--red)';
+                btn.style.color = 'var(--red)';
+                btn.innerHTML = '<i class="fa fa-times"></i>&nbsp; ERROR';
+                document.getElementById('engine-core').classList.add('engine-idle');
+                document.getElementById('engine-status').textContent = 'ERROR';
+                minerlog(`<span style="color:var(--red)">${getTime()} | ERROR: Check username / too many workers</span>`);
+            }
+        };
+    }
+
+    minerlog(`${getTime()} | Starting ${threads} mining thread(s) for user: ${username}`);
+});
+
+
+function updateShareDisplay() {
+    document.getElementById('shares-accepted').textContent = sharesCorrect;
+    document.getElementById('shares-rejected').textContent = sharesRejected;
+    document.getElementById('shares-total').textContent    = totalShares;
+    if (totalShares > 0) {
+        const pct = (sharesCorrect / totalShares * 100).toFixed(1);
+        document.getElementById('sharesperc').textContent = pct + '%';
+        document.getElementById('sharesperc').className =
+            'stat-value ' + (parseFloat(pct) >= 90 ? 'good' : parseFloat(pct) >= 70 ? 'warn' : 'bad');
+    }
+}
+
+
+/* ── Auto-start if URL params present ── */
+if (username) {
+    document.getElementById('mining-form').requestSubmit();
+}
+</script>
+</body>
+</html>
