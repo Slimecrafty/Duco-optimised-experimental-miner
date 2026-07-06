@@ -989,32 +989,83 @@ function minerlog(message) {
 }
 
 
-/* ── Pending mempool blocks (cosmetic) ── */
+/* ── Real DUCO network blocks from API ── */
+let pendingRefreshTimer = null;
+let lastSeenTxIds = new Set();
+
 function buildPendingPool() {
-    const grid = document.getElementById('pending-grid');
-    grid.innerHTML = '';
-    const count = 6;
-    for (let i = 0; i < count; i++) {
-        const el = document.createElement('div');
-        el.className = 'pending-mini';
-        el.style.animationDelay = (i * 0.35) + 's';
-        el.innerHTML =
-            `<div style="color:#00ccdd;font-size:0.62rem;font-weight:bold;margin-bottom:3px">BLK #${1000 + Math.floor(Math.random()*8999)}</div>` +
-            `<div style="color:#ff9f1c;font-size:0.58rem">${randomHex(8)}</div>` +
-            `<div style="color:#4a7a9b;font-size:0.56rem;margin-top:2px">diff: ${Math.floor(Math.random()*8+1)}</div>`;
-        grid.appendChild(el);
-    }
-    // Refresh periodically to look live
+    fetch('https://server.duinocoin.com/transactions', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(data => {
+            const txs = Array.isArray(data) ? data : (data.result || data.transactions || []);
+            const grid = document.getElementById('pending-grid');
+            grid.innerHTML = '';
+            // Show up to 6 most recent transactions
+            const recent = txs.slice(0, 6);
+            recent.forEach((tx, i) => {
+                const el = document.createElement('div');
+                el.className = 'pending-mini';
+                el.style.animationDelay = (i * 0.35) + 's';
+                const sender = (tx.Sender || tx.sender || '???').substring(0, 10);
+                const hash   = (tx.Hash   || tx.hash   || randomHex(8)).substring(0, 8);
+                const amount = parseFloat(tx.Amount || tx.amount || 0).toFixed(4);
+                const memo   = (tx.Memo   || tx.memo   || '').substring(0, 12);
+                el.innerHTML =
+                    `<div style="color:#00ccdd;font-size:0.62rem;font-weight:bold;margin-bottom:2px">${sender}</div>` +
+                    `<div style="color:#ff9f1c;font-size:0.58rem">${hash}…</div>` +
+                    `<div style="color:#00ff88;font-size:0.6rem">${amount} DUCO</div>` +
+                    `<div style="color:#4a7a9b;font-size:0.56rem">${memo}</div>`;
+                grid.appendChild(el);
+            });
+        })
+        .catch(() => {
+            // API unreachable — show placeholder blocks
+            const grid = document.getElementById('pending-grid');
+            if (!grid.children.length) {
+                for (let i = 0; i < 6; i++) {
+                    const el = document.createElement('div');
+                    el.className = 'pending-mini';
+                    el.style.animationDelay = (i * 0.35) + 's';
+                    el.innerHTML =
+                        `<div style="color:#00ccdd;font-size:0.62rem;font-weight:bold;margin-bottom:2px">miner${i}</div>` +
+                        `<div style="color:#ff9f1c;font-size:0.58rem">${randomHex(8)}…</div>` +
+                        `<div style="color:#00ff88;font-size:0.6rem">${(Math.random()*0.01).toFixed(6)} DUCO</div>`;
+                    grid.appendChild(el);
+                }
+            }
+        });
+
     if (isMining) {
         clearTimeout(pendingRefreshTimer);
-        pendingRefreshTimer = setTimeout(buildPendingPool, 4000 + Math.random()*3000);
+        pendingRefreshTimer = setTimeout(buildPendingPool, 15000);
     }
 }
-let pendingRefreshTimer = null;
+
+/* ── Real confirmed blocks from network (separate feed) ── */
+function fetchNetworkBlocks() {
+    fetch('https://server.duinocoin.com/transactions', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(data => {
+            const txs = Array.isArray(data) ? data : (data.result || data.transactions || []);
+            txs.slice(0, 4).reverse().forEach(tx => {
+                const id = tx.ID || tx.id || tx.Hash || tx.hash || Math.random();
+                if (lastSeenTxIds.has(String(id))) return;
+                lastSeenTxIds.add(String(id));
+
+                const sender = (tx.Sender || tx.sender || '???').substring(0, 10);
+                const hash   = (tx.Hash   || tx.hash   || randomHex(8)).substring(0, 8);
+                const amount = parseFloat(tx.Amount || tx.amount || 0).toFixed(4);
+                addConfirmedBlock(hash, null, sender, amount, true);
+            });
+        })
+        .catch(() => {}); // silent fail — user's own shares still appear
+}
 
 /* ── Confirmed block chain ── */
-function addConfirmedBlock(nonce, hashrate) {
-    const chain    = document.getElementById('confirmed-chain');
+// isNetworkBlock = true  → block from DUCO network API (dim cyan border)
+// isNetworkBlock = false → block YOU mined (bright green, glowing)
+function addConfirmedBlock(hashOrNonce, hashrate, sender, amount, isNetworkBlock) {
+    const chain       = document.getElementById('confirmed-chain');
     const placeholder = document.getElementById('chain-placeholder');
     if (placeholder) placeholder.remove();
 
@@ -1022,29 +1073,42 @@ function addConfirmedBlock(nonce, hashrate) {
     const blockNum = confirmedBlocks;
     const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Chain link between blocks
     if (blockNum > 1) {
         const link = document.createElement('div');
         link.className = 'chain-link';
+        if (isNetworkBlock) link.style.background = 'linear-gradient(90deg,#006677,#00ccdd)';
         chain.appendChild(link);
     }
 
     const card = document.createElement('div');
     card.className = 'block-card confirmed new-confirm';
-    card.innerHTML =
-        `<div class="block-num">#${String(blockNum).padStart(4,'0')}</div>` +
-        `<div class="block-hash">${randomHex(8)}…</div>` +
-        `<div class="block-meta">nonce: ${nonce || '?'}</div>` +
-        `<div class="block-meta">${formatHashrate(hashrate)}</div>` +
-        `<div class="block-meta">${ts}</div>`;
-    chain.appendChild(card);
 
-    // Scroll to newest
+    if (isNetworkBlock) {
+        // Real network block from DUCO API
+        card.style.borderColor = '#00ccdd';
+        card.style.boxShadow   = '0 0 8px rgba(0,204,221,0.25)';
+        card.innerHTML =
+            `<div class="block-num" style="color:#00ccdd">NET #${String(blockNum).padStart(4,'0')}</div>` +
+            `<div class="block-hash">${(hashOrNonce||randomHex(8)).substring(0,8)}…</div>` +
+            `<div class="block-meta">from: ${sender || '?'}</div>` +
+            `<div class="block-meta" style="color:#00ff88">${amount ? amount+' DUCO' : ''}</div>` +
+            `<div class="block-meta">${ts}</div>`;
+    } else {
+        // Block you mined yourself
+        card.innerHTML =
+            `<div class="block-num">✓ #${String(blockNum).padStart(4,'0')}</div>` +
+            `<div class="block-hash">${randomHex(8)}…</div>` +
+            `<div class="block-meta">nonce: ${hashOrNonce || '?'}</div>` +
+            `<div class="block-meta">${hashrate ? formatHashrate(hashrate) : ''}</div>` +
+            `<div class="block-meta">${ts}</div>`;
+    }
+
+    chain.appendChild(card);
     chain.scrollLeft = chain.scrollWidth;
 
-    // Keep chain from growing too large
+    // Keep chain from growing too large (max 10 visible)
     const cards = chain.querySelectorAll('.block-card');
-    if (cards.length > 8) {
+    if (cards.length > 10) {
         const links = chain.querySelectorAll('.chain-link');
         if (links[0]) links[0].remove();
         cards[0].remove();
@@ -1085,9 +1149,10 @@ document.getElementById('mining-form').addEventListener('submit', function(e) {
     engine.classList.remove('engine-idle');
     document.getElementById('engine-status').textContent = 'HASHING...';
 
-    // Start mempool animation
+    // Start mempool + fetch real network blocks immediately
     buildPendingPool();
-    pendingRefreshTimer = setTimeout(buildPendingPool, 4000);
+    fetchNetworkBlocks();
+    setInterval(fetchNetworkBlocks, 30000);
 
     mainGauge.maxValue = threads * 150000;
 
@@ -1150,9 +1215,11 @@ document.getElementById('mining-form').addEventListener('submit', function(e) {
                 minerlog(`<span style="color:var(--green)">${getTime()} | CPU${parts[2]}: Connected → ${nodeName}</span>`);
 
             } else if (type === 'NodeDisconnected') {
+                // Only update the status bar — no log spam. Worker already handles retry silently.
                 document.getElementById('status-dot').classList.remove('connected');
                 document.getElementById('node-status').textContent = 'RECONNECTING...';
-                minerlog(`<span style="color:var(--orange)">${getTime()} | CPU${parts[1]}: Disconnected — retrying in 5s</span>`);
+                document.getElementById('node').textContent = 'RECONNECTING';
+                document.getElementById('node').className = 'stat-value warn';
 
             } else if (type === 'UpdateLog') {
                 minerlog(`<span>${parts[1]}</span>`);
@@ -1189,10 +1256,10 @@ document.getElementById('mining-form').addEventListener('submit', function(e) {
                 sharesCorrect++;
                 updateShareDisplay();
 
-                // Nonce comes directly from worker now as parts[1]
-                const nonce = parts[1] || null;
+                // nonce = parts[1], isNetworkBlock = false (you mined this one)
+                const nonce  = parts[1] || null;
                 const lastHr = hashrates.reduce((a, b) => a + parseFloat(b), 0);
-                addConfirmedBlock(nonce, lastHr);
+                addConfirmedBlock(nonce, lastHr, null, null, false);
 
             } else if (type === 'BadShare') {
                 totalShares++;
