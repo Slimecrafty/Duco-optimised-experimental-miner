@@ -1139,15 +1139,23 @@ document.getElementById('mining-form').addEventListener('submit', function(e) {
             const parts = event.data.split(',');
             const type  = parts[0];
 
-            if (type === 'UpdateLog') {
-                minerlog(`<span>${parts[1]}</span>`);
+            if (type === 'NodeConnected') {
+                // parts[1] = ws url, parts[2] = workerVer
+                const nodeUrl = parts[1] || 'duinocoin node';
+                const nodeName = nodeUrl.replace('wss://','').split(':')[0];
+                document.getElementById('node').textContent = nodeName.toUpperCase();
+                document.getElementById('node').className = 'stat-value good';
+                document.getElementById('status-dot').classList.add('connected');
+                document.getElementById('node-status').textContent = 'CONNECTED';
+                minerlog(`<span style="color:var(--green)">${getTime()} | CPU${parts[2]}: Connected → ${nodeName}</span>`);
 
-                // Ping calculation from log timestamps
-                const t1 = parseInt(parts[2]);
-                const t2 = parseInt(parts[3]);
-                if (!isNaN(t1) && !isNaN(t2)) {
-                    document.getElementById('ping-display').textContent = Math.abs(Math.round((t1 - t2) / 10)) + 'ms';
-                }
+            } else if (type === 'NodeDisconnected') {
+                document.getElementById('status-dot').classList.remove('connected');
+                document.getElementById('node-status').textContent = 'RECONNECTING...';
+                minerlog(`<span style="color:var(--orange)">${getTime()} | CPU${parts[1]}: Disconnected — retrying in 5s</span>`);
+
+            } else if (type === 'UpdateLog') {
+                minerlog(`<span>${parts[1]}</span>`);
 
             } else if (type === 'UpdateHashrate') {
                 const hr  = parseFloat(parts[2]);
@@ -1181,19 +1189,8 @@ document.getElementById('mining-form').addEventListener('submit', function(e) {
                 sharesCorrect++;
                 updateShareDisplay();
 
-                // Node display
-                document.getElementById('node').textContent = 'MAGI-NODE';
-                document.getElementById('node').className = 'stat-value good';
-                document.getElementById('status-dot').classList.add('connected');
-                document.getElementById('node-status').textContent = 'CONNECTED';
-
-                // Add block to chain
-                const lastLog = document.getElementById('log-box').lastElementChild;
-                let nonce = null;
-                if (lastLog) {
-                    const m = lastLog.textContent.match(/Nonce[:\s]+(\d+)/i);
-                    if (m) nonce = m[1];
-                }
+                // Nonce comes directly from worker now as parts[1]
+                const nonce = parts[1] || null;
                 const lastHr = hashrates.reduce((a, b) => a + parseFloat(b), 0);
                 addConfirmedBlock(nonce, lastHr);
 
@@ -1201,15 +1198,19 @@ document.getElementById('mining-form').addEventListener('submit', function(e) {
                 totalShares++;
                 sharesRejected++;
                 updateShareDisplay();
+                minerlog(`<span style="color:var(--orange)">${getTime()} | Share rejected</span>`);
 
             } else if (type === 'Error') {
+                const errMsg = parts[1] || 'Unknown error';
                 const btn = document.getElementById('mine-btn');
                 btn.style.borderColor = 'var(--red)';
                 btn.style.color = 'var(--red)';
                 btn.innerHTML = '<i class="fa fa-times"></i>&nbsp; ERROR';
                 document.getElementById('engine-core').classList.add('engine-idle');
                 document.getElementById('engine-status').textContent = 'ERROR';
-                minerlog(`<span style="color:var(--red)">${getTime()} | ERROR: Check username / too many workers</span>`);
+                document.getElementById('status-dot').classList.remove('connected');
+                document.getElementById('node-status').textContent = 'ERROR';
+                minerlog(`<span style="color:var(--red)">${getTime()} | ERROR: ${errMsg}</span>`);
             }
         };
     }
